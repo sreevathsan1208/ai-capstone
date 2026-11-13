@@ -29,13 +29,22 @@ if analysis_mode == "Image Forensics":
         st.image(image, caption="Uploaded Media", use_container_width=True)
         
         if st.button("Run Deepshield Analysis"):
-            with st.spinner("Analyzing pixel anomalies and artifacts..."):
-                # TODO: Insert your model inference code here
-                # e.g., prediction = model.predict(image)
+                 with st.spinner("Analyzing pixel anomalies and artifacts..."):
                 
-                # Mock result for demonstration
-                is_fake = False
-                confidence = 0.94
+                                 # Temporary logic for testing UI states based on filename
+                                 filename = uploaded_file.name.lower()
+                                 if "fake" in filename or "manipulated" in filename or "ai" in filename:
+                                           is_fake = True
+                                            confidence = 0.89
+                                 else:
+                                           is_fake = False
+                                           confidence = 0.94
+                
+            st.divider()
+            if is_fake:
+                st.error(f"⚠️ Verdict: **FAKE / SYNTHETIC** (Confidence: {confidence})")
+            else:
+                st.success(f"✅ Verdict: **REAL / AUTHENTIC** (Confidence: {confidence})")
                 
             st.divider()
             if is_fake:
