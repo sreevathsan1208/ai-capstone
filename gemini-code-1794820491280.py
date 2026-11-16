@@ -1,7 +1,7 @@
 """
 DeepShield-X: Integrated Multimodal Deepfake Detection & Digital Identity Verification Engine
 Team Capstone Project (SIMATS - B Slot)
-Integrated Pipeline: Agent Search + Knowledge Reasoning + ML Classification + 1x/10x/100x Scalability
+Integrated Pipeline: Agent Search + Knowledge Reasoning + ML Classification + File Uploader
 """
 
 import streamlit as st
@@ -36,14 +36,13 @@ class MediaVerificationAgent:
         expanded_nodes = input_size * (4 if search_method == "A*" else 3)
         path_cost = round(input_size * 1.5 + random.uniform(0.5, 2.0), 2)
         
-        # Simulated search path traversal
         path = ["Input_Ingestion"]
         if input_size >= 10:
             path.append("Metadata_Check")
         path.extend(["Feature_Extraction", "Heuristic_Evaluation", "Final_Verdict"])
         
         execution_time = round((time.time() - start_time) + (input_size * 0.005), 4)
-        memory_used = round(12.4 + (input_size * 0.2), 2) # MB
+        memory_used = round(12.4 + (input_size * 0.2), 2)
         
         return {
             "method": search_method,
@@ -60,7 +59,6 @@ class MediaVerificationAgent:
 # ==========================================
 class DeepShieldKnowledgeBase:
     def __init__(self):
-        # 20 Mandatory Domain Facts
         self.facts = {
             "has_pixel_anomaly", "has_blinking_irregularity", "has_audio_visual_sync_lag",
             "has_metadata_mismatch", "has_high_compression_artifact", "has_unnatural_skin_texture",
@@ -71,7 +69,6 @@ class DeepShieldKnowledgeBase:
             "has_biometric_hash_collision", "has_revoked_digital_certificate"
         }
         
-        # 10 Mandatory Logical Rules
         self.rules = [
             {"id": "R1", "if": ["has_pixel_anomaly", "has_unnatural_skin_texture"], "then": "potential_image_deepfake"},
             {"id": "R2", "if": ["has_warp_border_artifact", "has_low_resolution_face_swap"], "then": "confirmed_face_swap"},
@@ -86,7 +83,6 @@ class DeepShieldKnowledgeBase:
         ]
 
     def forward_chain(self, evidence):
-        """Forward chaining engine to infer conclusions from facts."""
         inferred = set(evidence)
         trace = []
         added = True
@@ -105,10 +101,9 @@ class DeepShieldKnowledgeBase:
 # ==========================================
 class DeepShieldClassifier:
     def __init__(self):
-        # Initialize synthetic training data for Decision Tree & Neural/Kernel simulation
         np.random.seed(42)
-        X_train = np.random.rand(200, 5) # 5 feature metrics: pixel variance, sync lag, blink rate, metadata score, frequency anomaly
-        y_train = np.random.choice([0, 1], size=200, p=[0.5, 0.5]) # 0: Authentic, 1: Deepfake
+        X_train = np.random.rand(200, 5)
+        y_train = np.random.choice([0, 1], size=200, p=[0.5, 0.5])
         
         self.model = DecisionTreeClassifier(random_state=42, max_depth=5)
         self.model.fit(X_train, y_train)
@@ -119,7 +114,6 @@ class DeepShieldClassifier:
         return pred, max(proba)
 
     def evaluate_workload(self, scale_factor):
-        """Runs workload performance tests for 1x, 10x, and 100x scalability."""
         test_size = 50 * scale_factor
         X_test = np.random.rand(test_size, 5)
         y_test = np.random.choice([0, 1], size=test_size)
@@ -148,12 +142,20 @@ classifier = DeepShieldClassifier()
 tab1, tab2, tab3, tab4 = st.tabs(["🚀 Pipeline Execution", "🧠 Knowledge Reasoning", "🤖 ML & Scalability", "📊 Team & Evaluation Specs"])
 
 with tab1:
-    st.subheader("End-to-End Media & Identity Verification")
+    st.subheader("End-to-End Media Ingestion & Verification")
     col1, col2 = st.columns(2)
     
     with col1:
-        st.markdown("#### Input Parameters")
+        st.markdown("#### 1. Upload Media Asset")
         media_type = st.selectbox("Select Media Type", ["Image", "Video", "Audio Stream", "Digital Identity Document"])
+        
+        # FILE UPLOADER ADDED HERE
+        uploaded_file = st.file_uploader(
+            f"Upload your {media_type} file", 
+            type=["jpg", "jpeg", "png", "mp4", "avi", "mov", "wav", "mp3"]
+        )
+        
+        st.markdown("#### 2. Configure Pipeline Parameters")
         input_size = st.slider("Search Input Size (Batch Items)", min_value=1, max_value=50, value=10)
         search_algo = st.radio("Search Algorithm", ["A*", "Greedy Best-First"])
         
@@ -164,15 +166,25 @@ with tab1:
         )
 
     with col2:
-        st.markdown("#### Execution Results")
-        if st.button("Run Full Pipeline Verification", type="primary"):
-            # Run Agent Search
-            search_res = agent.heuristic_search(input_size, search_algo)
+        st.markdown("#### 3. Asset Preview & Execution Results")
+        
+        if uploaded_file is not None:
+            file_details = {"FileName": uploaded_file.name, "FileType": uploaded_file.type, "FileSize": f"{uploaded_file.size / 1024:.2f} KB"}
+            st.write("📁 **File Uploaded Successfully:**", file_details)
             
-            # Run Knowledge Reasoning
+            if uploaded_file.type.startswith("image"):
+                st.image(uploaded_file, caption="Uploaded Image Preview", use_column_width=True)
+            elif uploaded_file.type.startswith("video"):
+                st.video(uploaded_file)
+            elif uploaded_file.type.startswith("audio"):
+                st.audio(uploaded_file)
+        else:
+            st.info("ℹ️ Please upload a media file on the left to preview it here.")
+
+        if st.button("Run Full Pipeline Verification", type="primary"):
+            search_res = agent.heuristic_search(input_size, search_algo)
             derived, trace = kb.forward_chain(selected_evidence)
             
-            # Run ML Prediction
             dummy_features = [random.random() for _ in range(5)]
             pred_class, confidence = classifier.predict_sample(dummy_features)
             verdict = "🚨 DEEPFAKE DETECTED" if pred_class == 1 or len(derived) > 2 else "✅ AUTHENTIC ASSET"
