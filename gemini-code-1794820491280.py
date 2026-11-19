@@ -1,10 +1,10 @@
 """
 DeepShield-X: Integrated Multimodal Deepfake Detection & Digital Identity Verification Engine
 Team Capstone Project (SIMATS - B Slot)
-Integrated Pipeline: Agent Search + Knowledge Reasoning + ML Classification + File Uploader
+Integrated Pipeline: Agent Search + Knowledge Reasoning + ML Classification + Multi-Format Uploader
 """
 
-import random
+import hashlib
 import time
 from io import BytesIO
 
@@ -32,6 +32,7 @@ st.markdown(
     "*Integrated Capstone Platform combining Agent Search, First-Order Logic Reasoning, "
     "Machine Learning Classification, and Scalability Testing.*"
 )
+
 
 # ==========================================
 # MODULE 1: AGENT ARCHITECTURE & SEARCH
@@ -133,18 +134,19 @@ class DeepShieldKnowledgeBase:
 # ==========================================
 class DeepShieldClassifier:
     def __init__(self):
-        # Features: [anomaly_ratio, derived_risk, size_norm, type_code, high_sev_flag]
+        # Features: [anomaly_ratio, derived_risk, entropy_norm, type_code, high_sev_flag]
         X_train = np.array([
-            [0.00, 0.0, 0.2, 0.0, 0.0],
-            [0.05, 0.0, 0.5, 0.0, 0.0],
-            [0.10, 0.0, 0.3, 0.33, 0.0],
-            [0.15, 0.1, 0.7, 0.66, 0.0],
-            [0.35, 0.3, 0.4, 0.0, 1.0],
-            [0.50, 0.5, 0.8, 0.33, 1.0],
-            [0.70, 0.7, 0.2, 0.66, 1.0],
-            [0.90, 0.9, 0.9, 1.0, 1.0],
+            [0.00, 0.00, 0.20, 0.00, 0.0],
+            [0.00, 0.00, 0.85, 0.33, 0.0],
+            [0.05, 0.00, 0.50, 0.00, 0.0],
+            [0.10, 0.00, 0.60, 0.33, 0.0],
+            [0.15, 0.10, 0.70, 0.66, 0.0],
+            [0.35, 0.30, 0.50, 0.00, 1.0],
+            [0.50, 0.50, 0.80, 0.33, 1.0],
+            [0.70, 0.70, 0.65, 0.66, 1.0],
+            [0.90, 0.90, 0.90, 1.00, 1.0],
         ])
-        y_train = np.array([0, 0, 0, 0, 1, 1, 1, 1])
+        y_train = np.array([0, 0, 0, 0, 0, 1, 1, 1, 1])
 
         self.model = DecisionTreeClassifier(random_state=42, max_depth=4)
         self.model.fit(X_train, y_train)
@@ -176,26 +178,80 @@ class DeepShieldClassifier:
         }
 
 
-def extract_image_stats(uploaded_file):
-    """Extracts basic non-random image properties if Pillow is available."""
-    if not PIL_AVAILABLE or uploaded_file is None or not uploaded_file.type.startswith("image"):
+# ==========================================
+# FORMAT-AGNOSTIC ASSET INSPECTOR
+# ==========================================
+def compute_byte_entropy_norm(raw_bytes):
+    """Computes normalized Shannon byte entropy (0.0 to 1.0) for any uploaded file."""
+    if not raw_bytes:
+        return 0.0
+    counts = np.bincount(np.frombuffer(raw_bytes, dtype=np.uint8), minlength=256)
+    probs = counts[counts > 0] / len(raw_bytes)
+    entropy = -float(np.sum(probs * np.log2(probs)))
+    return round(min(entropy / 8.0, 1.0), 4)
+
+
+def inspect_uploaded_asset(uploaded_file, media_type):
+    """Extracts safe metadata and format-specific signals without failing on any format."""
+    if uploaded_file is None:
         return None
-    try:
-        raw_bytes = uploaded_file.getvalue()
-        with Image.open(BytesIO(raw_bytes)) as img:
-            width, height = img.size
-            mode = img.mode
-            arr = np.asarray(img.convert("RGB"), dtype=np.float32)
-            mean_luma = float(np.mean(arr))
-            std_luma = float(np.std(arr))
-        return {
-            "resolution": f"{width}x{height}",
-            "mode": mode,
-            "mean_brightness": round(mean_luma, 1),
-            "pixel_contrast_std": round(std_luma, 1),
+
+    raw_bytes = uploaded_file.getvalue()
+    sha256_short = hashlib.sha256(raw_bytes).hexdigest()[:12]
+    entropy_norm = compute_byte_entropy_norm(raw_bytes)
+
+    info = {
+        "file_name": uploaded_file.name,
+        "mime_type": uploaded_file.type or "application/octet-stream",
+        "size_kb": round(len(raw_bytes) / 1024.0, 2),
+        "sha256_prefix": sha256_short,
+        "entropy_norm": entropy_norm,
+        "format_details": {},
+    }
+
+    ext = uploaded_file.name.rsplit(".", 1)[-1].lower() if "." in uploaded_file.name else ""
+
+    if media_type == "Image" or ext in {"jpg", "jpeg", "png", "webp"}:
+        if PIL_AVAILABLE:
+            try:
+                with Image.open(BytesIO(raw_bytes)) as img:
+                    w, h = img.size
+                    arr = np.asarray(img.convert("RGB"), dtype=np.float32)
+                    info["format_details"] = {
+                        "resolution": f"{w}x{h}",
+                        "color_mode": img.mode,
+                        "mean_brightness": round(float(np.mean(arr)), 1),
+                        "contrast_std": round(float(np.std(arr)), 1),
+                    }
+            except Exception as e:
+                info["format_details"] = {"image_parse_note": str(e)}
+
+    elif media_type == "Video" or ext in {"mp4", "avi", "mov", "mkv", "webm"}:
+        info["format_details"] = {
+            "container_ext": ext or "unknown",
+            "stream_bytes": len(raw_bytes),
         }
-    except Exception:
-        return None
+
+    elif media_type == "Audio Stream" or ext in {"wav", "mp3", "ogg", "m4a"}:
+        info["format_details"] = {
+            "audio_ext": ext or "unknown",
+            "sample_bytes": len(raw_bytes),
+        }
+
+    else:
+        text_preview = None
+        if ext in {"txt", "csv", "json", "log", "md"}:
+            try:
+                text_preview = raw_bytes.decode("utf-8", errors="replace")[:400]
+            except Exception:
+                text_preview = None
+        info["format_details"] = {
+            "doc_ext": ext or "unknown",
+            "is_pdf": ext == "pdf",
+            "text_preview": text_preview,
+        }
+
+    return info
 
 
 # --- INITIALIZE SYSTEM COMPONENTS ---
@@ -212,19 +268,24 @@ tab1, tab2, tab3, tab4 = st.tabs([
 ])
 
 with tab1:
-    st.subheader("End-to-End Media Ingestion & Verification")
+    st.subheader("End-to-End Media & Identity Verification")
     col1, col2 = st.columns(2)
 
     with col1:
-        st.markdown("#### 1. Upload Media Asset")
+        st.markdown("#### 1. Upload Asset (Any Supported Format)")
         media_type = st.selectbox(
-            "Select Media Type",
+            "Select Asset Category",
             ["Image", "Video", "Audio Stream", "Digital Identity Document"],
         )
 
         uploaded_file = st.file_uploader(
             f"Upload your {media_type} file",
-            type=["jpg", "jpeg", "png", "mp4", "avi", "mov", "wav", "mp3", "pdf"],
+            type=[
+                "jpg", "jpeg", "png", "webp",
+                "mp4", "avi", "mov", "mkv", "webm",
+                "wav", "mp3", "ogg", "m4a",
+                "pdf", "txt", "csv", "json", "md",
+            ],
         )
 
         st.markdown("#### 2. Configure Pipeline Parameters")
@@ -237,36 +298,41 @@ with tab1:
             default=[],
         )
 
+        run_clicked = st.button("Run Full Pipeline Verification", type="primary")
+
     with col2:
         st.markdown("#### 3. Asset Preview & Execution Results")
-        img_stats = None
+        asset_info = inspect_uploaded_asset(uploaded_file, media_type)
 
-        if uploaded_file is not None:
-            file_details = {
-                "FileName": uploaded_file.name,
-                "FileType": uploaded_file.type,
-                "FileSize": f"{uploaded_file.size / 1024:.2f} KB",
-            }
-            st.write("📁 **File Uploaded Successfully:**", file_details)
+        if uploaded_file is not None and asset_info is not None:
+            st.write(
+                "📁 **File Loaded:**",
+                {
+                    "FileName": asset_info["file_name"],
+                    "Format": asset_info["mime_type"],
+                    "Size": f"{asset_info['size_kb']} KB",
+                    "SHA-256 Prefix": asset_info["sha256_prefix"],
+                    "Byte Entropy (Norm)": asset_info["entropy_norm"],
+                },
+            )
 
-            if uploaded_file.type.startswith("image"):
+            ext = uploaded_file.name.rsplit(".", 1)[-1].lower() if "." in uploaded_file.name else ""
+            if ext in {"jpg", "jpeg", "png", "webp"} or (uploaded_file.type or "").startswith("image"):
                 st.image(uploaded_file, caption="Uploaded Image Preview", use_container_width=True)
-                img_stats = extract_image_stats(uploaded_file)
-                if img_stats:
-                    st.caption(
-                        f"Resolution: {img_stats['resolution']} | Mode: {img_stats['mode']} | "
-                        f"Mean Brightness: {img_stats['mean_brightness']} | Std Dev: {img_stats['pixel_contrast_std']}"
-                    )
-            elif uploaded_file.type.startswith("video"):
+            elif ext in {"mp4", "avi", "mov", "mkv", "webm"} or (uploaded_file.type or "").startswith("video"):
                 st.video(uploaded_file)
-            elif uploaded_file.type.startswith("audio"):
+            elif ext in {"wav", "mp3", "ogg", "m4a"} or (uploaded_file.type or "").startswith("audio"):
                 st.audio(uploaded_file)
             else:
-                st.info("📄 Document uploaded. Metadata and rule-based verification are ready.")
+                preview_txt = asset_info["format_details"].get("text_preview")
+                if preview_txt:
+                    st.text_area("Document Preview (First 400 chars)", preview_txt, height=120, disabled=True)
+                else:
+                    st.info("📄 Identity / binary document loaded. Metadata and rule-based verification ready.")
         else:
-            st.info("ℹ️ Upload a media file on the left to preview it here, or run verification using selected anomalies.")
+            st.info("ℹ️ Upload any supported file on the left to preview it, or run verification with selected anomalies.")
 
-        if st.button("Run Full Pipeline Verification", type="primary"):
+        if run_clicked:
             search_res = agent.heuristic_search(input_size, search_algo)
             derived, trace = kb.forward_chain(selected_evidence)
 
@@ -281,8 +347,6 @@ with tab1:
             triggered_critical = sorted(fact for fact in derived if fact in critical_conclusions)
             has_critical = len(triggered_critical) > 0
 
-            file_size_kb = (uploaded_file.size / 1024.0) if uploaded_file is not None else 0.0
-            size_norm = min(file_size_kb / 2048.0, 1.0)
             type_map = {
                 "Image": 0.0,
                 "Video": 0.33,
@@ -291,43 +355,66 @@ with tab1:
             }
             anomaly_ratio = len(selected_evidence) / max(len(kb.facts), 1)
             derived_risk = min(len(derived) / 10.0, 1.0)
+            entropy_norm = asset_info["entropy_norm"] if asset_info else 0.0
             high_sev_flag = 1.0 if has_critical else 0.0
 
             features = [
                 anomaly_ratio,
                 derived_risk,
-                size_norm,
+                entropy_norm,
                 type_map.get(media_type, 0.0),
                 high_sev_flag,
             ]
             pred_class, confidence = classifier.predict_sample(features)
 
-            is_fake = has_critical or (pred_class == 1 and len(selected_evidence) >= 2)
-            verdict = "🚨 DEEPFAKE DETECTED" if is_fake else "✅ AUTHENTIC ASSET"
+            # Authentic by default unless critical rules fire or strong evidence + ML flag align
+            is_fake = has_critical or (pred_class == 1 and len(selected_evidence) >= 2 and len(trace) >= 1)
 
-            if is_fake:
-                st.error(f"**Final Verdict:** {verdict}")
+            st.session_state["last_verification"] = {
+                "is_fake": is_fake,
+                "verdict": "🚨 DEEPFAKE / TAMPERING DETECTED" if is_fake else "✅ AUTHENTIC ASSET",
+                "confidence": confidence,
+                "selected_evidence": list(selected_evidence),
+                "derived": sorted(derived),
+                "triggered_critical": triggered_critical,
+                "search_res": search_res,
+                "trace": trace,
+                "asset_info": asset_info,
+            }
+
+        if "last_verification" in st.session_state:
+            res = st.session_state["last_verification"]
+            if res["is_fake"]:
+                st.error(f"**Final Verdict:** {res['verdict']}")
             else:
-                st.success(f"**Final Verdict:** {verdict}")
+                st.success(f"**Final Verdict:** {res['verdict']}")
 
-            st.metric("Model Confidence Score", f"{confidence * 100:.2f}%")
+            st.metric("Model Confidence Score", f"{res['confidence'] * 100:.2f}%")
 
             with st.expander("🧾 View Reasoning Summary"):
-                st.write(f"**Selected Evidence ({len(selected_evidence)}):**", selected_evidence if selected_evidence else "None")
-                st.write(f"**Inferred Conclusions ({len(derived)}):**", sorted(derived) if derived else "None")
-                if triggered_critical:
-                    st.write("**Critical Conclusions Triggered:**", triggered_critical)
-                elif not selected_evidence:
-                    st.write("**Reason:** No anomaly indicators selected and no critical tampering rules fired.")
+                st.write(
+                    f"**Selected Evidence ({len(res['selected_evidence'])}):**",
+                    res["selected_evidence"] if res["selected_evidence"] else "None",
+                )
+                st.write(
+                    f"**Inferred Conclusions ({len(res['derived'])}):**",
+                    res["derived"] if res["derived"] else "None",
+                )
+                if res["triggered_critical"]:
+                    st.write("**Critical Conclusions Triggered:**", res["triggered_critical"])
+                elif not res["selected_evidence"]:
+                    st.write("**Reason:** No anomaly indicators selected and no critical rules triggered.")
                 else:
-                    st.write("**Reason:** Evidence did not trigger critical deepfake/tampering conclusions.")
+                    st.write("**Reason:** Selected indicators did not trigger critical tampering rules.")
+                if res["asset_info"] and res["asset_info"]["format_details"]:
+                    st.write("**Format Metadata:**", res["asset_info"]["format_details"])
 
             with st.expander("🔍 View Agent Search Metrics"):
-                st.write(search_res)
+                st.write(res["search_res"])
 
             with st.expander("📜 View Logical Rule Inference Trace"):
-                if trace:
-                    for t in trace:
+                if res["trace"]:
+                    for t in res["trace"]:
                         st.text(t)
                 else:
                     st.text("No inference rules triggered from current evidence.")
